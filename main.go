@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
+	"os/exec"
 	"runtime"
 	"sort"
 	"strconv"
@@ -16,6 +18,7 @@ import (
 )
 
 var version = "1.2.0"
+var keychainService = "pritunl-auth"
 var color = map[string]string{
 	"red":   "\x1b[31;1m",
 	"green": "\x1b[32;1m",
@@ -102,10 +105,47 @@ func disconnect(gt *gotunl.Gotunl, id string) {
 
 }
 
+func activeProfiles(gt *gotunl.Gotunl) {
+	activeProfiles := ""
+	for _, cid := range gjson.Get(gt.GetConnections(), "*.id").Array() {
+		activeProfiles += gjson.Get(gt.Profiles[cid.String()].Conf, "name").String()
+	}
+	fmt.Println(activeProfiles)
+}
+
 func connect(gt *gotunl.Gotunl, id string) {
 	for pid, p := range gt.Profiles {
-		if id == gjson.Get(p.Conf, "name").String() || id == strconv.Itoa(p.ID) {
-			gt.ConnectProfile(pid, "", "")
+		name := gjson.Get(p.Conf, "name").String()
+		if id == name || id == strconv.Itoa(p.ID) {
+			password := ""
+			if runtime.GOOS == "darwin" {
+				command := fmt.Sprintf("security find-generic-password -w -s '%s' -a '%s'", keychainService, name)
+				log.Printf("Trying to get PIN from using [%s]", command)
+				out, err := exec.Command("bash", "-c", command).Output()
+				if err != nil {
+					log.Fatalf("Error [%s] while executing the command. " +
+						"Is password missing in the keychain?", err)
+				}
+				pincode := strings.TrimSpace(string(out))
+				log.Printf("Fetched a PIN from keychain")
+
+				var otp string
+				fmt.Printf("Enter the OTP code: ")
+				fmt.Scanln(&otp)
+				password = pincode + otp
+			}
+			gt.ConnectProfile(pid, "", password)
+			fmt.Print("Connecting")
+			i:=0
+			for i < 30 {
+				fmt.Print(".")
+				i += 1
+				if gt.CheckStatus() == "true" {
+					break
+				}
+				time.Sleep(1 * time.Second)
+			}
+			fmt.Println("")
 		}
 	}
 }
@@ -140,10 +180,10 @@ func formatSince(t time.Time) string {
 }
 
 func usage(a *flag.Flag) {
-	if a.Name == "l" || a.Name == "v" {
-		fmt.Printf("  -%v \t\t%v\n", a.Name, a.Usage)
-	} else {
+	if a.Name == "c" {
 		fmt.Printf("  -%v <profile>\t%v\n", a.Name, a.Usage)
+	} else {
+		fmt.Printf("  -%v \t\t%v\n", a.Name, a.Usage)
 	}
 }
 
@@ -155,8 +195,9 @@ func main() {
 		flag.VisitAll(usage)
 	}
 	l := flag.Bool("l", false, "List connections")
+	a := flag.Bool("a", false, "List active profiles")
 	c := flag.String("c", "", "Connect to profile ID or Name")
-	d := flag.String("d", "", "Disconnect profile or \"all\"")
+	d := flag.Bool("d", false, "Disconnect profile or \"all\"")
 	v := flag.Bool("v", false, "Show version")
 
 	flag.Parse()
@@ -168,12 +209,18 @@ func main() {
 		listConnections(&gt)
 		os.Exit(0)
 	}
-	if *c != "" {
-		connect(&gt, *c)
+	if *a {
+		activeProfiles(&gt)
 		os.Exit(0)
 	}
-	if *d != "" {
-		disconnect(&gt, *d)
+	if *c != "" {
+		connect(&gt, *c)
+		listConnections(&gt)
+		os.Exit(0)
+	}
+	if *d {
+		disconnect(&gt, "all")
+		listConnections(&gt)
 		os.Exit(0)
 	}
 	if *v {

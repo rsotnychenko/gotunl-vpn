@@ -8,6 +8,7 @@ Using go mod, requires go>=1.13:
 
 ```
 git clone https://github.com/cghdev/gotunl-vpn.git
+git checkout -b dirty-hacks origin/dirty-hacks
 cd gotunl-vpn
 go install
 ```

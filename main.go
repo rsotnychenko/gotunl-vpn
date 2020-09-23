@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cghdev/gotunl"
+	"github.com/cghdev/gotunl/pkg/gotunl"
 	"github.com/olekukonko/tablewriter"
 	"github.com/tidwall/gjson"
 )
@@ -123,7 +123,7 @@ func connect(gt *gotunl.Gotunl, id string) {
 				log.Printf("Trying to get PIN from using [%s]", command)
 				out, err := exec.Command("bash", "-c", command).Output()
 				if err != nil {
-					log.Fatalf("Error [%s] while executing the command. " +
+					log.Fatalf("Error [%s] while executing the command. "+
 						"Is password missing in the keychain?", err)
 				}
 				pincode := strings.TrimSpace(string(out))
@@ -136,7 +136,7 @@ func connect(gt *gotunl.Gotunl, id string) {
 			}
 			gt.ConnectProfile(pid, "", password)
 			fmt.Print("Connecting")
-			i:=0
+			i := 0
 			for i < 30 {
 				fmt.Print(".")
 				i += 1
